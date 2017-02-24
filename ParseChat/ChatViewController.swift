@@ -11,16 +11,24 @@ import Parse
 
 class ChatViewController: UIViewController, UITableViewDelegate, UITableViewDataSource {
 
-    @IBOutlet weak var chatMessage: UITextField!
+    let refreshTimeInterval: TimeInterval = 1
     
-    var messages : [PFObject]?
+    @IBOutlet weak var chatMessage: UITextField!
+    @IBOutlet weak var tableView: UITableView!
+    
+    var messages : [PFObject]!
     
     override func viewDidLoad() {
         super.viewDidLoad()
         
-        NSTimer.scheduledTimerWithTimeInterval(5, target: self, selector: "onTimer", userInfo: nil, repeats: true)
+        tableView.dataSource = self
+        tableView.delegate = self
         
-        // Do any additional setup after loading the view.
+        Timer.scheduledTimer(timeInterval: refreshTimeInterval,
+                             target: self,
+                             selector: #selector(onTimer),
+                             userInfo: nil,
+                             repeats: true)
     }
     
     func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int {
@@ -38,20 +46,15 @@ class ChatViewController: UIViewController, UITableViewDelegate, UITableViewData
         
         return cell
     }
-
-
-    override func didReceiveMemoryWarning() {
-        super.didReceiveMemoryWarning()
-        // Dispose of any resources that can be recreated.
-    }
     
     @IBAction func chatButtonPressed(_ sender: AnyObject) {
-        let gameScore = PFObject(className:"Message")
+        let gameScore = PFObject(className: "Message")
         gameScore["text"] = chatMessage.text!
         gameScore.saveInBackground {
             (success: Bool, error: Error?) -> Void in
             if (success) {
-                print("Success: \(gameScore["text"])")
+                self.chatMessage.text = ""
+                print("Success: \(gameScore["text"]!)")
             } else {
                 print(error?.localizedDescription ?? "error")
             }
@@ -59,28 +62,22 @@ class ChatViewController: UIViewController, UITableViewDelegate, UITableViewData
     }
     
     func onTimer() {
-        let query = PFQuery(className:"Message")
-        query.findObjectsInBackground { (response: [PFObject]?, error: Error?) in
-            if error != nil {
-                print("error: \(error)")
-            } else {
-                //print("response\(response)")
-                self.messages = response!
+        let query = PFQuery(className: "Message")
+        // Cannot call by byAscending because the limited number of responses API returns
+        // Must call byDescending first, then use the reversed method to show most recent message on the bottom
+        query.order(byDescending: "createdAt").findObjectsInBackground { (response: [PFObject]?, error: Error?) in
+            if let response = response {
+                self.messages = response.reversed()
+                
                 self.tableView.reloadData()
                 
-                self.tableViewScrollToBottom(animated: true)
+                DispatchQueue.main.async {
+                    let indexPath = IndexPath(row: self.messages.count - 1, section: 0)
+                    self.tableView.scrollToRow(at: indexPath, at: .bottom, animated: true)
+                }
+            } else {
+                print("error: \(error)")
             }
         }
     }
-    
-    /*
-    // MARK: - Navigation
-
-    // In a storyboard-based application, you will often want to do a little preparation before navigation
-    override func prepare(for segue: UIStoryboardSegue, sender: Any?) {
-        // Get the new view controller using segue.destinationViewController.
-        // Pass the selected object to the new view controller.
-    }
-    */
-
 }
