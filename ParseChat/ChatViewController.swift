@@ -23,6 +23,7 @@ class ChatViewController: UIViewController, UITableViewDelegate, UITableViewData
         
         tableView.dataSource = self
         tableView.delegate = self
+        tableView.estimatedRowHeight = 50
         
         Timer.scheduledTimer(timeInterval: refreshTimeInterval,
                              target: self,
@@ -35,45 +36,56 @@ class ChatViewController: UIViewController, UITableViewDelegate, UITableViewData
         return messages?.count ?? 0
     }
     
-    
     func tableView(_ tableView: UITableView, cellForRowAt indexPath: IndexPath) -> UITableViewCell {
-        let cell = tableView.dequeueReusableCell(withIdentifier: "messageCell", for: indexPath) as! messageCell
+        if let cell = tableView.dequeueReusableCell(withIdentifier: "MessageCell", for: indexPath) as? MessageCell,
+            let messages = messages {
+            
+            let message = messages[indexPath.row]
+            
+            if let user = message.value(forKey: "user") as? PFUser, let username = user.username {
+                cell.userNameLabel.isHidden = false
+                cell.userNameLabel.text = "\(username): "
+            } else {
+                cell.userNameLabel.isHidden = true
+            }
+            
+            let text = message.value(forKey: "text") as? String
+            
+            cell.messageLabel.text = text
+            
+            return cell
+        }
         
-        let message = messages?[indexPath.row]
-        let text = message?.value(forKey: "text") as? String
-        
-        cell.messageLabel.text = text
-        
-        return cell
+        return UITableViewCell()
     }
     
     @IBAction func chatButtonPressed(_ sender: AnyObject) {
-        let gameScore = PFObject(className: "Message")
-        gameScore["text"] = chatMessage.text!
-        gameScore.saveInBackground {
+        let msg = PFObject(className: "Message")
+        msg["user"] = PFUser.current()!
+        msg["text"] = chatMessage.text!
+        msg.saveInBackground {
             (success: Bool, error: Error?) -> Void in
             if (success) {
                 self.chatMessage.text = ""
-                print("Success: \(gameScore["text"]!)")
             } else {
-                print(error?.localizedDescription ?? "error")
+                print(error?.localizedDescription ?? "Unknown error")
             }
         }
     }
     
     func onTimer() {
-        let query = PFQuery(className: "Message")
         // Cannot call by byAscending because the limited number of responses API returns
         // Must call byDescending first, then use the reversed method to show most recent message on the bottom
-        query.order(byDescending: "createdAt").findObjectsInBackground { (response: [PFObject]?, error: Error?) in
+        let query = PFQuery(className: "Message").order(byDescending: "createdAt").includeKey("user")
+        
+        query.findObjectsInBackground { (response: [PFObject]?, error: Error?) in
             if let response = response {
                 self.messages = response.reversed()
-                
                 self.tableView.reloadData()
                 
                 DispatchQueue.main.async {
                     let indexPath = IndexPath(row: self.messages.count - 1, section: 0)
-                    self.tableView.scrollToRow(at: indexPath, at: .bottom, animated: true)
+                    self.tableView.scrollToRow(at: indexPath, at: .bottom, animated: false)
                 }
             } else {
                 print("error: \(error)")
